@@ -1,0 +1,47 @@
+pipeline {
+    agent any
+
+    environment {
+        CONTAINER_TAG = "${env.BRANCH_NAME}-${env.BUILD_NUMBER.padLeft(5, '0')}"
+	registry = "redmanh/webapp"
+	registryCredential = 'dockerhub'
+    }
+
+    stages {
+
+        stage ('Build Image') {
+            steps{
+			  script {
+				dockerImage = docker.build registry + ":$CONTAINER_TAG"
+			  }
+			}
+        }
+		
+		stage('Push Image') {
+		  when { branch 'dev' }
+		  steps{    
+			script {
+			  docker.withRegistry( '', registryCredential ) {
+				dockerImage.push()
+			  }
+			}
+		  }
+		}
+		
+		stage('Remove Unused docker image') {
+		  steps{
+			sh "docker rmi $registry:$CONTAINER_TAG"
+		  }
+		}
+		
+		stage('Slack Message') {
+            steps {
+                slackSend channel: '#alerts',
+                    color: 'good',
+                    message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\n More info at: ${env.BUILD_URL}"
+            
+            }
+        }
+    }
+
+}
